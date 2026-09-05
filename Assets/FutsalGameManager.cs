@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -10,20 +9,26 @@ public class FutsalGameManager : MonoBehaviour
     [Header("Match")]
     [SerializeField] private float matchDuration = 60f;
     [SerializeField] private float resetDelay = 1.1f;
+    [SerializeField] private float kickoffCountdown = 3f;
 
+    private enum MatchState { Countdown, Playing, GoalCelebration, Finished }
+    private MatchState state = MatchState.Countdown;
     private BallController ball;
-    private PlayerController player;
-    private Rigidbody playerRigidbody;
-    private RivalDefenderAI rivalDefender;
-    private Vector3 playerSpawnPosition;
-    private Quaternion playerSpawnRotation;
+    public FutsalTeamMatch Teams { get; private set; }
+    private float goalDelayRemaining;
+    private float countdownRemaining;
+    private float previousTimeScale;
+    private bool restarting;
 
-    private float timeRemaining;
-    private int playerScore;
-    private int rivalScore;
-    private bool acceptingGoals = true;
-    private bool matchEnded;
-    private string eventMessage = string.Empty;
+    public float TimeRemaining { get; private set; }
+    public int PlayerScore { get; private set; }
+    public int RivalScore { get; private set; }
+    public bool IsPaused { get; private set; }
+    public bool MatchEnded => state == MatchState.Finished;
+    public bool IsPlaying => state == MatchState.Playing && !IsPaused && !restarting;
+    public float StaminaNormalized => Teams != null && Teams.ControlledPlayer != null
+        ? Teams.ControlledPlayer.Motor.StaminaNormalized : 0f;
+    public string EventMessage { get; private set; } = string.Empty;
 
     private void Awake()
     {
@@ -34,196 +39,187 @@ public class FutsalGameManager : MonoBehaviour
         }
 
         Instance = this;
-        timeRemaining = matchDuration;
+        previousTimeScale = Time.timeScale;
+        Time.timeScale = 1f;
+        TimeRemaining = matchDuration;
     }
 
     private void Start()
     {
         ball = FindFirstObjectByType<BallController>();
-        player = FindFirstObjectByType<PlayerController>();
-        rivalDefender = FindFirstObjectByType<RivalDefenderAI>();
-
-        if (player != null)
+        PlayerController player = FindFirstObjectByType<PlayerController>();
+        if (player == null || ball == null)
         {
-            playerRigidbody = player.GetComponent<Rigidbody>();
-            playerSpawnPosition = player.transform.position;
-            playerSpawnRotation = player.transform.rotation;
+            Debug.LogError("3v3 requires a player template and a ball in the scene.");
+            enabled = false;
+            return;
         }
+        Teams = gameObject.AddComponent<FutsalTeamMatch>();
+        Teams.Initialize(player, ball);
+
+        gameObject.AddComponent<FutsalMatchUI>().Initialize(this);
+        BeginCountdown();
     }
 
     private void Update()
     {
-        if (matchEnded)
+        if (restarting)
+            return;
+
+        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+        {
+            if (IsPaused) ResumeMatch();
+            else PauseMatch();
+        }
+
+        if (MatchEnded)
         {
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
                 RestartMatch();
             return;
         }
 
-        timeRemaining = Mathf.Max(0f, timeRemaining - Time.deltaTime);
-        if (timeRemaining <= 0f)
+        if (IsPaused)
+            return;
+
+        if (state == MatchState.Countdown)
+        {
+            countdownRemaining -= Time.unscaledDeltaTime;
+            if (countdownRemaining <= 0f)
+            {
+                EventMessage = string.Empty;
+                state = MatchState.Playing;
+                ApplySimulationState();
+            }
+            else
+            {
+                EventMessage = Mathf.CeilToInt(countdownRemaining).ToString();
+            }
+            return;
+        }
+
+        if (state == MatchState.GoalCelebration)
+        {
+            // Physics is frozen, but the celebration still needs to finish.
+            goalDelayRemaining -= Time.unscaledDeltaTime;
+            if (goalDelayRemaining <= 0f)
+            {
+                ResetPositions();
+                BeginCountdown();
+            }
+            return;
+        }
+
+        TimeRemaining = Mathf.Max(0f, TimeRemaining - Time.deltaTime);
+        if (TimeRemaining <= 0f)
             EndMatch();
     }
 
     public void RegisterGoal(GoalSide defendedSide)
     {
-        if (!acceptingGoals || matchEnded)
+        if (!IsPlaying)
             return;
 
-        acceptingGoals = false;
-        rivalDefender?.SetPaused(true);
-
+        state = MatchState.GoalCelebration;
+        Teams.NextKickoffTeam = defendedSide == GoalSide.South ? FutsalTeam.Home : FutsalTeam.Away;
+        goalDelayRemaining = resetDelay;
         if (defendedSide == GoalSide.North)
         {
-            playerScore++;
-            eventMessage = "GOAL!";
+            PlayerScore++;
+            EventMessage = "GOAL!";
         }
         else
         {
-            rivalScore++;
-            eventMessage = "OWN GOAL";
+            RivalScore++;
+            EventMessage = "RIVAL GOAL";
         }
 
         StopMovingObjects();
-        StartCoroutine(ResetAfterGoal());
+        ApplySimulationState();
     }
 
-    private IEnumerator ResetAfterGoal()
+    public void PauseMatch()
     {
-        yield return new WaitForSeconds(resetDelay);
+        if (MatchEnded || IsPaused || restarting)
+            return;
 
-        if (matchEnded)
-            yield break;
+        IsPaused = true;
+        ApplySimulationState();
+    }
 
-        ResetPositions();
-        eventMessage = string.Empty;
-        acceptingGoals = true;
-        rivalDefender?.SetPaused(false);
+    public void ResumeMatch()
+    {
+        if (!IsPaused || MatchEnded || restarting)
+            return;
+
+        IsPaused = false;
+        ApplySimulationState();
+    }
+
+    private void ApplySimulationState()
+    {
+        Time.timeScale = IsPlaying ? 1f : 0f;
+    }
+
+    private void BeginCountdown()
+    {
+        state = MatchState.Countdown;
+        countdownRemaining = kickoffCountdown;
+        EventMessage = Mathf.CeilToInt(countdownRemaining).ToString();
+        ApplySimulationState();
+    }
+
+    private void OnApplicationPause(bool paused)
+    {
+        if (paused) PauseMatch();
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus) PauseMatch();
     }
 
     private void StopMovingObjects()
     {
+        Teams?.StopAll();
         if (ball != null)
         {
             ball.Rigidbody.linearVelocity = Vector3.zero;
             ball.Rigidbody.angularVelocity = Vector3.zero;
         }
 
-        if (playerRigidbody != null)
-        {
-            playerRigidbody.linearVelocity = Vector3.zero;
-            playerRigidbody.angularVelocity = Vector3.zero;
-        }
-
-        rivalDefender?.ResetToHome();
     }
 
     private void ResetPositions()
     {
-        ball?.ResetBall();
-
-        if (playerRigidbody != null)
-        {
-            playerRigidbody.position = playerSpawnPosition;
-            playerRigidbody.rotation = playerSpawnRotation;
-            playerRigidbody.linearVelocity = Vector3.zero;
-            playerRigidbody.angularVelocity = Vector3.zero;
-        }
+        Teams?.ResetFormation();
     }
 
     private void EndMatch()
     {
-        matchEnded = true;
-        acceptingGoals = false;
-        rivalDefender?.SetPaused(true);
+        state = MatchState.Finished;
         StopMovingObjects();
-
-        if (player != null)
-            player.enabled = false;
-
-        PlayerKickController kickController = player != null
-            ? player.GetComponent<PlayerKickController>()
-            : null;
-        if (kickController != null)
-            kickController.enabled = false;
-
-        if (playerScore > rivalScore)
-            eventMessage = "YOU WIN!";
-        else if (playerScore < rivalScore)
-            eventMessage = "YOU LOSE";
-        else
-            eventMessage = "DRAW";
+        ApplySimulationState();
+        EventMessage = PlayerScore > RivalScore ? "YOU WIN!"
+            : PlayerScore < RivalScore ? "YOU LOSE" : "DRAW";
     }
 
-    private void RestartMatch()
+    public void RestartMatch()
     {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        if (restarting)
+            return;
+
+        restarting = true;
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().path);
     }
 
-    private void OnGUI()
+    private void OnDestroy()
     {
-        float scale = Mathf.Clamp(Screen.width / 1280f, 0.75f, 1.4f);
+        if (Instance != this)
+            return;
 
-        GUIStyle scoreStyle = new GUIStyle(GUI.skin.label)
-        {
-            alignment = TextAnchor.MiddleCenter,
-            fontSize = Mathf.RoundToInt(30f * scale),
-            fontStyle = FontStyle.Bold,
-            normal = { textColor = Color.white }
-        };
-
-        GUIStyle messageStyle = new GUIStyle(scoreStyle)
-        {
-            fontSize = Mathf.RoundToInt(48f * scale),
-            normal = { textColor = new Color(1f, 0.82f, 0.12f) }
-        };
-
-        GUIStyle helpStyle = new GUIStyle(GUI.skin.label)
-        {
-            alignment = TextAnchor.MiddleCenter,
-            fontSize = Mathf.RoundToInt(18f * scale),
-            normal = { textColor = new Color(1f, 1f, 1f, 0.85f) }
-        };
-
-        string scoreText = $"PLAYER  {playerScore}  -  {rivalScore}  RIVAL";
-        string timeText = $"{Mathf.CeilToInt(timeRemaining):00}";
-
-        GUI.Box(new Rect(Screen.width * 0.5f - 220f * scale, 14f, 440f * scale, 82f * scale), GUIContent.none);
-        GUI.Label(new Rect(0f, 18f, Screen.width, 40f * scale), scoreText, scoreStyle);
-        GUI.Label(new Rect(0f, 53f * scale, Screen.width, 35f * scale), timeText, scoreStyle);
-
-        if (player != null)
-        {
-            float barWidth = 260f * scale;
-            float barHeight = 14f * scale;
-            Rect staminaBackground = new Rect(
-                Screen.width * 0.5f - barWidth * 0.5f,
-                101f * scale,
-                barWidth,
-                barHeight);
-            Rect staminaFill = new Rect(
-                staminaBackground.x + 2f,
-                staminaBackground.y + 2f,
-                (staminaBackground.width - 4f) * player.StaminaNormalized,
-                staminaBackground.height - 4f);
-
-            Color previousColor = GUI.color;
-            GUI.color = new Color(0f, 0f, 0f, 0.72f);
-            GUI.DrawTexture(staminaBackground, Texture2D.whiteTexture);
-            GUI.color = Color.Lerp(
-                new Color(0.95f, 0.18f, 0.08f),
-                new Color(0.2f, 0.95f, 0.35f),
-                player.StaminaNormalized);
-            GUI.DrawTexture(staminaFill, Texture2D.whiteTexture);
-            GUI.color = previousColor;
-        }
-
-        if (!string.IsNullOrEmpty(eventMessage))
-        {
-            GUI.Label(new Rect(0f, Screen.height * 0.28f, Screen.width, 70f * scale), eventMessage, messageStyle);
-        }
-
-        string help = matchEnded ? "Press R to restart" : "WASD: Move    Shift: Sprint    Space: Kick";
-        GUI.Label(new Rect(0f, Screen.height - 48f * scale, Screen.width, 35f * scale), help, helpStyle);
+        Time.timeScale = previousTimeScale;
+        Instance = null;
     }
 }

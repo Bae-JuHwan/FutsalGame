@@ -8,8 +8,16 @@ public class PlayerKickController : MonoBehaviour
     [SerializeField] private float kickPower = 8.5f;
     [SerializeField] private float liftPower = 0.18f;
     [SerializeField] private float kickCooldown = 0.25f;
+    [SerializeField] private float fullChargeTime = 0.9f;
 
     private float nextKickTime;
+    private float chargeStartedAt;
+    private bool charging;
+
+    public bool IsCharging => charging;
+    public float ChargeNormalized => charging
+        ? Mathf.Clamp01((Time.time - chargeStartedAt) / fullChargeTime)
+        : 0f;
 
     public void ConfigureKick(float power, float lift)
     {
@@ -19,18 +27,59 @@ public class PlayerKickController : MonoBehaviour
 
     private void Update()
     {
-        bool keyboardKick = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
-        bool gamepadKick = Gamepad.current != null && Gamepad.current.buttonSouth.wasPressedThisFrame;
-
-        if (keyboardKick || gamepadKick)
+        FutsalPlayer member = GetComponent<FutsalPlayer>();
+        if (member != null && (!member.IsHuman || !member.HasBall))
         {
-            TryKick();
+            CancelCharge();
+            return;
+        }
+        if (FutsalGameManager.Instance != null && !FutsalGameManager.Instance.IsPlaying)
+        {
+            CancelCharge();
+            return;
+        }
+
+        bool kickPressed = (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
+                           (Gamepad.current != null && Gamepad.current.buttonSouth.wasPressedThisFrame);
+        bool kickReleased = (Keyboard.current != null && Keyboard.current.spaceKey.wasReleasedThisFrame) ||
+                            (Gamepad.current != null && Gamepad.current.buttonSouth.wasReleasedThisFrame);
+
+        if (member == null)
+        {
+            if (kickPressed) TryKick();
+            return;
+        }
+
+        if (kickPressed && Time.time >= nextKickTime)
+        {
+            charging = true;
+            chargeStartedAt = Time.time;
+        }
+
+        if (kickReleased && charging)
+        {
+            float power = ChargeNormalized;
+            charging = false;
+            nextKickTime = Time.time + kickCooldown;
+            member.Match.TryShoot(member, power);
         }
     }
+
+    public void CancelCharge() => charging = false;
 
     // A mobile UI button can call this public method later.
     public void TryKick()
     {
+        if (FutsalGameManager.Instance != null && !FutsalGameManager.Instance.IsPlaying)
+            return;
+
+        FutsalPlayer member = GetComponent<FutsalPlayer>();
+        if (member != null)
+        {
+            if (member.IsHuman) member.Match.TryShoot(member, 0.25f);
+            return;
+        }
+
         if (Time.time < nextKickTime)
             return;
 

@@ -96,7 +96,7 @@ public static class FutsalMobileControlsSetup
             SerializedProperty maxHorizontalSpeed = serializedBall.FindProperty("maxHorizontalSpeed");
             if (maxHorizontalSpeed != null)
             {
-                maxHorizontalSpeed.floatValue = 20f;
+                maxHorizontalSpeed.floatValue = 34f;
                 serializedBall.ApplyModifiedPropertiesWithoutUndo();
             }
         }

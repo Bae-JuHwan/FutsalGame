@@ -3935,7 +3935,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BallController
   resetHeight: -2
-  maxHorizontalSpeed: 20
+  maxHorizontalSpeed: 34
   maxVerticalSpeed: 4
 --- !u!54 &1714444470
 Rigidbody:

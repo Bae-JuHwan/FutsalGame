@@ -21,11 +21,22 @@ public class PlayerController : MonoBehaviour
     private float stamina;
     private float recoveryStartsAt;
     private float currentMoveSpeed;
+    private Vector2 aiInput;
 
     public Vector3 MoveDirection { get; private set; }
     public float MoveSpeed => currentMoveSpeed;
     public float StaminaNormalized => maxStamina > 0f ? stamina / maxStamina : 0f;
     public bool IsSprinting { get; private set; }
+
+    public void SetAIInput(Vector2 input) => aiInput = Vector2.ClampMagnitude(input, 1f);
+
+    public void ClearInput()
+    {
+        moveInput = aiInput = Vector2.zero;
+        sprintHeld = false;
+        MoveDirection = Vector3.zero;
+        IsSprinting = false;
+    }
 
     private void Awake()
     {
@@ -38,12 +49,28 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
-        moveInput = ReadMoveInput();
-        sprintHeld = ReadSprintInput();
+        if (FutsalGameManager.Instance != null && !FutsalGameManager.Instance.IsPlaying)
+        {
+            moveInput = Vector2.zero;
+            sprintHeld = false;
+            MoveDirection = Vector3.zero;
+            IsSprinting = false;
+            return;
+        }
+
+        FutsalPlayer member = GetComponent<FutsalPlayer>();
+        bool human = member == null || member.IsHuman;
+        moveInput = human ? ReadMoveInput() : aiInput;
+        sprintHeld = human && ReadSprintInput();
     }
 
     private void FixedUpdate()
     {
+        if (FutsalGameManager.Instance != null && !FutsalGameManager.Instance.IsPlaying)
+            return;
+        FutsalPlayer member = GetComponent<FutsalPlayer>();
+        if (member != null && !member.IsHuman)
+            moveInput = aiInput;
         Vector3 moveDirection = new Vector3(moveInput.x, 0f, moveInput.y);
         if (moveDirection.sqrMagnitude > 1f)
         {

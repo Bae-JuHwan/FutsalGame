@@ -4,13 +4,18 @@ using UnityEngine;
 public class BallController : MonoBehaviour
 {
     [SerializeField] private float resetHeight = -2f;
-    [SerializeField] private float maxHorizontalSpeed = 20f;
+    [SerializeField] private float maxHorizontalSpeed = 34f;
     [SerializeField] private float maxVerticalSpeed = 4f;
 
     private Rigidbody ballRigidbody;
     private Vector3 spawnPosition;
 
     public Rigidbody Rigidbody => ballRigidbody;
+
+    public void SetMaxHorizontalSpeed(float speed)
+    {
+        maxHorizontalSpeed = Mathf.Max(0f, speed);
+    }
 
     private void Awake()
     {

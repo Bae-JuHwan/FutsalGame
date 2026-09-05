@@ -32,7 +32,15 @@ public class PlayerDribbleController : MonoBehaviour
     private float turnAssistUntil;
     private Vector3 previousMoveDirection;
 
-    public bool HasPossession => hasPossession;
+    public bool HasPossession => GetComponent<FutsalPlayer>() is FutsalPlayer member ? member.HasBall : hasPossession;
+    public bool CanAcquire => Time.time >= releasedUntil;
+
+    public void ResetControl()
+    {
+        ReleaseControl(0f);
+        releasedUntil = 0f;
+        previousMoveDirection = Vector3.zero;
+    }
 
     private void Awake()
     {
@@ -56,6 +64,18 @@ public class PlayerDribbleController : MonoBehaviour
         if (ball == null)
         {
             FindBall();
+            return;
+        }
+
+        FutsalPlayer member = GetComponent<FutsalPlayer>();
+        if (member != null)
+        {
+            hasPossession = member.HasBall;
+            if (hasPossession)
+            {
+                UpdateTurnAssist();
+                ControlBall();
+            }
             return;
         }
 
@@ -97,6 +117,7 @@ public class PlayerDribbleController : MonoBehaviour
 
     public void ReleaseControl(float duration = 0.45f)
     {
+        GetComponent<FutsalPlayer>()?.Match?.NotifyRelease(this);
         hasPossession = false;
         releasedUntil = Mathf.Max(releasedUntil, Time.time + duration);
         turnAssistUntil = 0f;

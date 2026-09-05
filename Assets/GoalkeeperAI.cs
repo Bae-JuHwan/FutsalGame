@@ -11,11 +11,13 @@ public class GoalkeeperAI : MonoBehaviour
     private Rigidbody goalkeeperRigidbody;
     private BallController ball;
     private Vector3 homePosition;
+    private Quaternion homeRotation;
 
     private void Awake()
     {
         goalkeeperRigidbody = GetComponent<Rigidbody>();
         homePosition = transform.position;
+        homeRotation = transform.rotation;
     }
 
     private void Start()
@@ -53,6 +55,12 @@ public class GoalkeeperAI : MonoBehaviour
             goalkeeperRigidbody.MoveRotation(
                 Quaternion.LookRotation(lookDirection.normalized, Vector3.up));
         }
+    }
+
+    public void ResetToHome()
+    {
+        goalkeeperRigidbody.position = homePosition;
+        goalkeeperRigidbody.rotation = homeRotation;
     }
 
     private void FindBall()
