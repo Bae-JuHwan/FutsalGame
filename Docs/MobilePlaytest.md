@@ -6,10 +6,47 @@ UI labels currently use English, matching the existing touch controls.
 
 ## Editor / Device Simulator
 
+- On entering Play mode, confirm the FUTSAL mode menu appears and the ball,
+  players and timer remain frozen. Gameplay controls and the scoreboard should
+  be hidden. Escape and app focus changes must not dismiss this menu.
+- Select 3 v 3: confirm six active team players, one goalkeeper per side.
+  Select 5 v 5 in a separate run: confirm ten active team players, one goalkeeper
+  per side, with four field players arranged in a diamond per team.
+- Repeat all match checks below in BOTH modes. During 5v5 possession, verify
+  the wings, forward and deeper passing outlet occupy distinct positions;
+  during defense, one player presses while the others retain coverage.
+- From PAUSE and the result screen, use CHANGE MODE and select the other mode.
+  Confirm the score/time reset, the correct number of players spawn and the
+  controls still work. Repeat 3v3 -> 5v5 -> 3v3 to check for duplicate UI/players.
+- RESTART must retain the current mode, restore all players' stamina and scores,
+  reset the timer to 60, and start a fresh countdown with the home kickoff.
 - Move, sprint and kick with the existing touch controls. Check the timer,
   score and stamina bar. Keyboard controls remain WASD/arrows, Shift and Space.
-- A match now starts with a 3-2-1 countdown as 3v3: two field players and one
-  goalkeeper per team. The match timer must remain stopped during countdowns.
+- With possession, start moving from rest while holding RUN/Shift, then toggle
+  sprint repeatedly while dribbling straight and diagonally. The player must not
+  overtake the ball on acceleration. Repeat for both modes and after receiving
+  a pass. Check sharp turns, stopping, wall/opponent contact, and a pass/shot
+  immediately after sprinting: released balls must remain free of carry assist.
+- While walking and sprinting, repeatedly cut 45/90 degrees, reverse 180 degrees,
+  and circle the stick. The ball should follow a tight arc near the feet instead
+  of continuing along the old direction. Repeat beside walls and opponents to
+  check collision response and tackles, then pass/shoot during the turn to verify
+  that possession release immediately ends the close turn control.
+- Movement now accelerates gradually and brakes during sharp direction changes.
+  On a sprint reversal, check that the body rotates while speed drops, then picks
+  up speed in the new direction. Small stick adjustments should remain responsive.
+  Passing/shooting must still aim from input direction, even while the body turns.
+- Dribble touches use shorter intervals during turns, a close walking distance,
+  and a slightly longer sprint distance. Inspect start/stop transitions and
+  repeated zigzags for jitter or ball lag. Animation contact synchronization
+  remains a separate step.
+- Players now use a textured athlete model with Idle/Jog/Sprint/Kick clips.
+  Verify blue/red teams and green/orange keepers in both modes. Watch for feet
+  sinking, clothing clipping and foot sliding while turning. Confirm PAUSE freezes
+  animation, restart clears action poses, and passing/shooting plays a kick without
+  moving the gameplay root. The ball-touch physics is not animation-event driven.
+- A match starts with a 3-2-1 countdown after choosing a mode: two or four field
+  players and one goalkeeper per team. The timer must stop during countdowns.
   PASS selects the teammate closest to the movement/facing direction, including
   a backward pass to the goalkeeper; the keyboard shortcut is E and
   the gamepad shortcut is the west/left face button. Control and the yellow ring

@@ -8,6 +8,8 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float moveSpeed = 7f;
     [SerializeField] private float sprintSpeed = 9.5f;
     [SerializeField] private float rotationSpeed = 14f;
+    [SerializeField] private float acceleration = 28f;
+    [SerializeField] private float braking = 42f;
 
     [Header("Stamina")]
     [SerializeField] private float maxStamina = 100f;
@@ -24,17 +26,26 @@ public class PlayerController : MonoBehaviour
     private Vector2 aiInput;
 
     public Vector3 MoveDirection { get; private set; }
+    public Vector3 FacingDirection { get; private set; } = Vector3.forward;
     public float MoveSpeed => currentMoveSpeed;
     public float StaminaNormalized => maxStamina > 0f ? stamina / maxStamina : 0f;
     public bool IsSprinting { get; private set; }
 
     public void SetAIInput(Vector2 input) => aiInput = Vector2.ClampMagnitude(input, 1f);
 
+    public void ResetStamina()
+    {
+        stamina = maxStamina;
+        recoveryStartsAt = 0f;
+        currentMoveSpeed = moveSpeed;
+    }
+
     public void ClearInput()
     {
         moveInput = aiInput = Vector2.zero;
         sprintHeld = false;
         MoveDirection = Vector3.zero;
+        FacingDirection = transform.forward;
         IsSprinting = false;
     }
 
@@ -45,6 +56,7 @@ public class PlayerController : MonoBehaviour
                                        RigidbodyConstraints.FreezeRotationZ;
         stamina = maxStamina;
         currentMoveSpeed = moveSpeed;
+        FacingDirection = transform.forward;
     }
 
     private void Update()
@@ -82,19 +94,28 @@ public class PlayerController : MonoBehaviour
         UpdateSprint(moveDirection.sqrMagnitude > 0.01f);
 
         Vector3 velocity = playerRigidbody.linearVelocity;
-        velocity.x = moveDirection.x * currentMoveSpeed;
-        velocity.z = moveDirection.z * currentMoveSpeed;
-        playerRigidbody.linearVelocity = velocity;
-
+        Vector3 flatVelocity = new Vector3(velocity.x, 0f, velocity.z);
+        Quaternion nextRotation = playerRigidbody.rotation;
         if (moveDirection.sqrMagnitude > 0.001f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDirection, Vector3.up);
-            Quaternion smoothRotation = Quaternion.Slerp(
-                playerRigidbody.rotation,
-                targetRotation,
-                rotationSpeed * Time.fixedDeltaTime);
-            playerRigidbody.MoveRotation(smoothRotation);
+            float speedRatio = Mathf.Clamp01(flatVelocity.magnitude / sprintSpeed);
+            nextRotation = Quaternion.RotateTowards(playerRigidbody.rotation, targetRotation,
+                rotationSpeed * 40f * Mathf.Lerp(1f, 0.55f, speedRatio) * Time.fixedDeltaTime);
+            playerRigidbody.MoveRotation(nextRotation);
         }
+        FacingDirection = nextRotation * Vector3.forward;
+        // Input still expresses aiming intent; actual locomotion follows the body.
+        // A sharp cut brakes first, then accelerates as the body aligns.
+        float alignment = moveDirection.sqrMagnitude > 0.001f
+            ? Mathf.Max(0f, Vector3.Dot(FacingDirection, moveDirection.normalized)) : 0f;
+        float targetSpeed = currentMoveSpeed * moveDirection.magnitude * alignment * alignment;
+        Vector3 desiredVelocity = FacingDirection * targetSpeed;
+        float rate = desiredVelocity.magnitude < flatVelocity.magnitude ? braking : acceleration;
+        flatVelocity = Vector3.MoveTowards(flatVelocity, desiredVelocity, rate * Time.fixedDeltaTime);
+        velocity.x = flatVelocity.x;
+        velocity.z = flatVelocity.z;
+        playerRigidbody.linearVelocity = velocity;
     }
 
     private static Vector2 ReadMoveInput()

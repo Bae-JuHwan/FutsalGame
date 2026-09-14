@@ -39,9 +39,11 @@ public class FutsalTeamMatch : MonoBehaviour
     private float nextSwitchTime;
     private float nextActionTime;
     private float nextTackleTime;
+    private int teamSize;
 
-    public void Initialize(PlayerController template, BallController matchBall)
+    public void Initialize(PlayerController template, BallController matchBall, int playersPerTeam = 3)
     {
+        teamSize = playersPerTeam == 5 ? 5 : 3;
         ball = matchBall;
         ball.SetMaxHorizontalSpeed(34f);
         followCamera = FindFirstObjectByType<CameraFollow>();
@@ -57,22 +59,25 @@ public class FutsalTeamMatch : MonoBehaviour
         PassIndicatorMaterial = new Material(template.GetComponent<Renderer>().sharedMaterial);
         PassIndicatorMaterial.SetColor("_BaseColor", Color.cyan);
         PassIndicatorMaterial.SetColor("_Color", Color.cyan);
-        var objects = new GameObject[6];
+        var objects = new GameObject[teamSize * 2];
         objects[0] = template.gameObject;
         for (int i = 1; i < objects.Length; i++)
             objects[i] = Instantiate(template.gameObject);
 
-        Vector3[] homes = {
-            new Vector3(-3f, 1f, -5f), new Vector3(4f, 1f, -6f), new Vector3(0f, 1f, -16f),
-            new Vector3(3f, 1f, 5f), new Vector3(-4f, 1f, 6f), new Vector3(0f, 1f, 16f)
-        };
+        Vector3[] homes = teamSize == 5
+            ? new[] { new Vector3(0f, 1f, -4f), new Vector3(-5f, 1f, -7f),
+                new Vector3(5f, 1f, -7f), new Vector3(0f, 1f, -11f), new Vector3(0f, 1f, -16f) }
+            : new[] { new Vector3(-3f, 1f, -5f), new Vector3(4f, 1f, -6f), new Vector3(0f, 1f, -16f) };
         for (int i = 0; i < objects.Length; i++)
         {
-            FutsalTeam team = i < 3 ? FutsalTeam.Home : FutsalTeam.Away;
-            FutsalRole role = i % 3 == 2 ? FutsalRole.Goalkeeper : FutsalRole.FieldPlayer;
-            objects[i].name = $"{team} {(role == FutsalRole.Goalkeeper ? "GK" : (i % 3 + 1).ToString())}";
+            FutsalTeam team = i < teamSize ? FutsalTeam.Home : FutsalTeam.Away;
+            int slot = i % teamSize;
+            FutsalRole role = slot == teamSize - 1 ? FutsalRole.Goalkeeper : FutsalRole.FieldPlayer;
+            objects[i].name = $"{team} {(role == FutsalRole.Goalkeeper ? "GK" : (slot + 1).ToString())}";
             FutsalPlayer member = objects[i].AddComponent<FutsalPlayer>();
-            member.Initialize(this, team, role, homes[i]);
+            Vector3 home = homes[slot];
+            if (team == FutsalTeam.Away) { home.x = -home.x; home.z = -home.z; }
+            member.Initialize(this, team, role, home, role == FutsalRole.Goalkeeper ? 1 : slot + 7);
             players.Add(member);
         }
         ResetFormation();
@@ -220,12 +225,22 @@ public class FutsalTeamMatch : MonoBehaviour
                 1f, member.HomePosition.z);
         if (Possessor != null && Possessor.Team == member.Team)
         {
+            if (teamSize == 5)
+            {
+                // Keep the diamond's wings, pivot and deeper outlet distinct.
+                float depth = (member.HomePosition.z * attack + 7f) * 0.9f;
+                return new Vector3(Mathf.Clamp(member.HomePosition.x + ballPosition.x * 0.15f, -8f, 8f),
+                    1f, Mathf.Clamp(ballPosition.z + attack * depth, -13f, 13f));
+            }
             // Offer a wide passing option, keeping clear of the ball carrier.
             float lane = Possessor.transform.position.x >= 0f ? -4.5f : 4.5f;
             return new Vector3(lane, 1f, Mathf.Clamp(ballPosition.z + attack * 3f, -13f, 13f));
         }
         if (NearestFieldPlayer(member.Team) == member)
             return new Vector3(Mathf.Clamp(ballPosition.x, -10f, 10f), 1f, Mathf.Clamp(ballPosition.z, -16f, 16f));
+        if (teamSize == 5)
+            return new Vector3(Mathf.Clamp(member.HomePosition.x * 0.8f + ballPosition.x * 0.3f, -8f, 8f),
+                1f, Mathf.Clamp(member.HomePosition.z + ballPosition.z * 0.4f, -13f, 13f));
         return new Vector3(Mathf.Clamp(ballPosition.x * 0.55f + Mathf.Sign(member.HomePosition.x) * 2f, -8f, 8f),
             1f, Mathf.Clamp(ballPosition.z - attack * 4f, -13f, 13f));
     }
@@ -262,6 +277,7 @@ public class FutsalTeamMatch : MonoBehaviour
         if (target == null)
             return;
         passer.GetComponent<PlayerKickController>()?.CancelCharge();
+        passer.GetComponent<FutsalPlayerVisual>()?.PlayKick(0.45f);
         Vector3 destination = target.transform.position + Flat(target.Body.linearVelocity) * passLeadTime;
         Vector3 direction = Flat(destination - ball.transform.position).normalized;
         passer.Dribble.ReleaseControl(0.7f);
@@ -361,6 +377,7 @@ public class FutsalTeamMatch : MonoBehaviour
             direction = Vector3.Slerp(inputDirection, goalDirection, assist).normalized;
         }
         shooter.Dribble.ReleaseControl(0.7f);
+        shooter.GetComponent<FutsalPlayerVisual>()?.PlayKick(charge);
         receiver = null;
         float shotSpeed = Mathf.Lerp(minimumShotSpeed, maximumShotSpeed, Mathf.Clamp01(charge));
         float shotLift = Mathf.Lerp(minimumShotLift, maximumShotLift, Mathf.Clamp01(charge));
@@ -389,9 +406,10 @@ public class FutsalTeamMatch : MonoBehaviour
         ball.Rigidbody.position = new Vector3(0f, 0.28f, 0f);
         ball.Rigidbody.linearVelocity = Vector3.zero;
         ball.Rigidbody.angularVelocity = Vector3.zero;
-        FutsalPlayer kickoff = players[NextKickoffTeam == FutsalTeam.Home ? 0 : 3];
+        FutsalPlayer kickoff = players[NextKickoffTeam == FutsalTeam.Home ? 0 : teamSize];
         kickoff.Body.position = new Vector3(0f, 1f, -kickoff.AttackDirection * 0.95f);
         nextActionTime = Time.time + 0.25f;
+        nextTackleTime = 0f;
         AssignPossession(kickoff);
         if (NextKickoffTeam == FutsalTeam.Away)
             SetControlledPlayer(players[0]);

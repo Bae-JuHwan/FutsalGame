@@ -18,7 +18,7 @@ public class FutsalPlayer : MonoBehaviour
     private GameObject indicator;
     private GameObject passIndicator;
 
-    public void Initialize(FutsalTeamMatch match, FutsalTeam team, FutsalRole role, Vector3 home)
+    public void Initialize(FutsalTeamMatch match, FutsalTeam team, FutsalRole role, Vector3 home, int shirtNumber = 7)
     {
         Match = match;
         Team = team;
@@ -35,6 +35,7 @@ public class FutsalPlayer : MonoBehaviour
         properties.SetColor("_BaseColor", color);
         properties.SetColor("_Color", color);
         GetComponent<Renderer>().SetPropertyBlock(properties);
+        gameObject.AddComponent<FutsalPlayerVisual>().Initialize(GetComponent<Renderer>().sharedMaterial, team, role, shirtNumber);
 
         indicator = new GameObject("Controlled Player Ring", typeof(LineRenderer));
         indicator.transform.SetParent(transform, false);
@@ -92,5 +93,6 @@ public class FutsalPlayer : MonoBehaviour
         Body.angularVelocity = Vector3.zero;
         Motor.ClearInput();
         GetComponent<PlayerKickController>()?.CancelCharge();
+        GetComponent<FutsalPlayerVisual>()?.ResetPose();
     }
 }

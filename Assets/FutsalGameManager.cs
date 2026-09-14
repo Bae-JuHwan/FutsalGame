@@ -11,8 +11,11 @@ public class FutsalGameManager : MonoBehaviour
     [SerializeField] private float resetDelay = 1.1f;
     [SerializeField] private float kickoffCountdown = 3f;
 
-    private enum MatchState { Countdown, Playing, GoalCelebration, Finished }
-    private MatchState state = MatchState.Countdown;
+    private enum MatchState { SelectingMode, Countdown, Playing, GoalCelebration, Finished }
+    private MatchState state = MatchState.SelectingMode;
+    private PlayerController playerTemplate;
+    public int TeamSize { get; private set; } = 3;
+    public bool IsSelectingMode => state == MatchState.SelectingMode;
     private BallController ball;
     public FutsalTeamMatch Teams { get; private set; }
     private float goalDelayRemaining;
@@ -47,23 +50,30 @@ public class FutsalGameManager : MonoBehaviour
     private void Start()
     {
         ball = FindFirstObjectByType<BallController>();
-        PlayerController player = FindFirstObjectByType<PlayerController>();
-        if (player == null || ball == null)
+        playerTemplate = FindFirstObjectByType<PlayerController>();
+        if (playerTemplate == null || ball == null)
         {
-            Debug.LogError("3v3 requires a player template and a ball in the scene.");
+            Debug.LogError("A match requires a player template and a ball in the scene.");
             enabled = false;
             return;
         }
-        Teams = gameObject.AddComponent<FutsalTeamMatch>();
-        Teams.Initialize(player, ball);
-
+        ApplySimulationState();
         gameObject.AddComponent<FutsalMatchUI>().Initialize(this);
+    }
+
+    public void StartMatch(int teamSize)
+    {
+        if (!IsSelectingMode || restarting || (teamSize != 3 && teamSize != 5))
+            return;
+        TeamSize = teamSize;
+        Teams = gameObject.AddComponent<FutsalTeamMatch>();
+        Teams.Initialize(playerTemplate, ball, TeamSize);
         BeginCountdown();
     }
 
     private void Update()
     {
-        if (restarting)
+        if (restarting || IsSelectingMode)
             return;
 
         if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
@@ -140,7 +150,7 @@ public class FutsalGameManager : MonoBehaviour
 
     public void PauseMatch()
     {
-        if (MatchEnded || IsPaused || restarting)
+        if (IsSelectingMode || MatchEnded || IsPaused || restarting)
             return;
 
         IsPaused = true;
@@ -205,6 +215,20 @@ public class FutsalGameManager : MonoBehaviour
     }
 
     public void RestartMatch()
+    {
+        if (restarting || IsSelectingMode || Teams == null)
+            return;
+        PlayerScore = RivalScore = 0;
+        TimeRemaining = matchDuration;
+        IsPaused = false;
+        Teams.NextKickoffTeam = FutsalTeam.Home;
+        foreach (FutsalPlayer member in Teams.Players)
+            member.Motor.ResetStamina();
+        Teams.ResetFormation();
+        BeginCountdown();
+    }
+
+    public void ReturnToModeSelection()
     {
         if (restarting)
             return;

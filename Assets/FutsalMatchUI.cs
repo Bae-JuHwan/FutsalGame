@@ -16,6 +16,10 @@ public class FutsalMatchUI : MonoBehaviour
     private GameObject menu;
     private Button pauseButton;
     private Button resumeButton;
+    private Button restartButton;
+    private Button modesButton;
+    private Button threeButton;
+    private Button fiveButton;
     private Button passButton;
     private Button defendButton;
     private Text score;
@@ -84,9 +88,18 @@ public class FutsalMatchUI : MonoBehaviour
         resumeButton = CreateButton("Resume", "RESUME", menuSafeRoot, match.ResumeMatch);
         Place(resumeButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f),
             new Vector2(0f, -20f), new Vector2(440f, 110f));
-        Button restart = CreateButton("Restart", "RESTART", menuSafeRoot, match.RestartMatch);
-        Place(restart.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f),
+        restartButton = CreateButton("Restart", "RESTART", menuSafeRoot, match.RestartMatch);
+        Place(restartButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f),
             new Vector2(0f, -160f), new Vector2(440f, 110f));
+        modesButton = CreateButton("Modes", "CHANGE MODE", menuSafeRoot, match.ReturnToModeSelection);
+        Place(modesButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -300f), new Vector2(440f, 100f));
+        threeButton = CreateButton("Three a Side", "3 v 3", menuSafeRoot, () => match.StartMatch(3));
+        Place(threeButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f),
+            new Vector2(-240f, -70f), new Vector2(400f, 140f));
+        fiveButton = CreateButton("Five a Side", "5 v 5", menuSafeRoot, () => match.StartMatch(5));
+        Place(fiveButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f),
+            new Vector2(240f, -70f), new Vector2(400f, 140f));
 
         mobileControls = GameObject.Find("Mobile Controls");
         if (mobileControls != null)
@@ -130,7 +143,7 @@ public class FutsalMatchUI : MonoBehaviour
     {
         string scoreText = $"PLAYER  {match.PlayerScore}  -  {match.RivalScore}  RIVAL";
         score.text = scoreText;
-        timer.text = Mathf.CeilToInt(match.TimeRemaining).ToString("00");
+        timer.text = $"{match.TeamSize}v{match.TeamSize}  |  {Mathf.CeilToInt(match.TimeRemaining):00}";
         float stamina = Mathf.Clamp01(match.StaminaNormalized);
         staminaFill.rectTransform.anchorMax = new Vector2(stamina, 1f);
         staminaFill.color = Color.Lerp(new Color(0.95f, 0.18f, 0.08f), new Color(0.2f, 0.95f, 0.35f), stamina);
@@ -145,13 +158,19 @@ public class FutsalMatchUI : MonoBehaviour
             new Color(1f, 0.18f, 0.05f),
             shotPower);
         message.text = match.EventMessage;
-        bool showMenu = match.IsPaused || match.MatchEnded;
+        bool selecting = match.IsSelectingMode;
+        bool showMenu = selecting || match.IsPaused || match.MatchEnded;
         menu.SetActive(showMenu);
         pauseButton.gameObject.SetActive(!showMenu);
         message.gameObject.SetActive(!showMenu);
         resumeButton.gameObject.SetActive(match.IsPaused && !match.MatchEnded);
-        menuTitle.text = match.MatchEnded ? match.EventMessage : "PAUSED";
-        menuScore.text = scoreText;
+        restartButton.gameObject.SetActive(!selecting);
+        modesButton.gameObject.SetActive(!selecting);
+        threeButton.gameObject.SetActive(selecting);
+        fiveButton.gameObject.SetActive(selecting);
+        safeRoot.gameObject.SetActive(!selecting);
+        menuTitle.text = selecting ? "FUTSAL" : match.MatchEnded ? match.EventMessage : "PAUSED";
+        menuScore.text = selecting ? "SELECT MATCH MODE" : $"{match.TeamSize} v {match.TeamSize}   |   {scoreText}";
         if (mobileControls != null && mobileControls.activeSelf != match.IsPlaying)
         {
             mobileControls.SetActive(match.IsPlaying);
