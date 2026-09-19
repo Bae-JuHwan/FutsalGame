@@ -29,6 +29,7 @@ public class FutsalGameManager : MonoBehaviour
     public bool IsPaused { get; private set; }
     public bool MatchEnded => state == MatchState.Finished;
     public bool IsPlaying => state == MatchState.Playing && !IsPaused && !restarting;
+    public bool IsGoalCelebration => state == MatchState.GoalCelebration;
     public float StaminaNormalized => Teams != null && Teams.ControlledPlayer != null
         ? Teams.ControlledPlayer.Motor.StaminaNormalized : 0f;
     public string EventMessage { get; private set; } = string.Empty;
@@ -110,7 +111,7 @@ public class FutsalGameManager : MonoBehaviour
 
         if (state == MatchState.GoalCelebration)
         {
-            // Physics is frozen, but the celebration still needs to finish.
+            // Keep ball/net physics running while player controls and the clock stop.
             goalDelayRemaining -= Time.unscaledDeltaTime;
             if (goalDelayRemaining <= 0f)
             {
@@ -132,7 +133,7 @@ public class FutsalGameManager : MonoBehaviour
 
         state = MatchState.GoalCelebration;
         Teams.NextKickoffTeam = defendedSide == GoalSide.South ? FutsalTeam.Home : FutsalTeam.Away;
-        goalDelayRemaining = resetDelay;
+        goalDelayRemaining = Mathf.Max(resetDelay, 2f);
         if (defendedSide == GoalSide.North)
         {
             PlayerScore++;
@@ -144,7 +145,7 @@ public class FutsalGameManager : MonoBehaviour
             EventMessage = "RIVAL GOAL";
         }
 
-        StopMovingObjects();
+        Teams?.StopAll();
         ApplySimulationState();
     }
 
@@ -168,7 +169,7 @@ public class FutsalGameManager : MonoBehaviour
 
     private void ApplySimulationState()
     {
-        Time.timeScale = IsPlaying ? 1f : 0f;
+        Time.timeScale = !IsPaused && !restarting && (IsPlaying || IsGoalCelebration) ? 1f : 0f;
     }
 
     private void BeginCountdown()

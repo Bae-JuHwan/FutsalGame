@@ -61,8 +61,8 @@ public static class FutsalBallSetup
         {
             ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             ball.name = "Ball";
-            ball.transform.position = new Vector3(0f, 0.28f, -3.5f);
-            ball.transform.localScale = Vector3.one * 0.5f;
+            ball.transform.position = new Vector3(0f, 0.17f, -3.5f);
+            ball.transform.localScale = Vector3.one * 0.3f;
 
             Renderer renderer = ball.GetComponent<Renderer>();
             renderer.sharedMaterial = CreateOrLoadBallMaterial();

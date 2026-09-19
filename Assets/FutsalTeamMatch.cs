@@ -40,11 +40,14 @@ public class FutsalTeamMatch : MonoBehaviour
     private float nextActionTime;
     private float nextTackleTime;
     private int teamSize;
+    private Bounds pitchBounds = new Bounds(Vector3.zero, new Vector3(22f, 0.2f, 36f));
 
     public void Initialize(PlayerController template, BallController matchBall, int playersPerTeam = 3)
     {
         teamSize = playersPerTeam == 5 ? 5 : 3;
         ball = matchBall;
+        Collider field = GameObject.Find("Field")?.GetComponent<Collider>();
+        if (field != null) pitchBounds = field.bounds;
         ball.SetMaxHorizontalSpeed(34f);
         followCamera = FindFirstObjectByType<CameraFollow>();
         foreach (RivalDefenderAI oldDefender in FindObjectsByType<RivalDefenderAI>(FindObjectsSortMode.None))
@@ -108,7 +111,18 @@ public class FutsalTeamMatch : MonoBehaviour
         {
             if (member.IsHuman)
                 continue;
-            Vector3 target = ChooseAITarget(member) + CalculateSeparation(member) * separationStrength;
+            Vector3 target = ChooseAITarget(member);
+            Vector3 separation = CalculateSeparation(member) * separationStrength;
+            if (IsChasingBall(member))
+            {
+                // Keep a little sideways avoidance without letting formation
+                // spacing cancel the designated defender's approach to the ball.
+                Vector3 approach = Flat(target - member.transform.position).normalized;
+                separation = Vector3.ProjectOnPlane(separation, approach) * 0.25f;
+                target = ClampToPitch(member, target + separation);
+            }
+            else
+                target += separation;
             Vector3 delta = Flat(target - member.transform.position);
             Vector3 direction = delta.magnitude > 0.2f ? Vector3.ClampMagnitude(delta * 1.5f, 0.78f) : Vector3.zero;
             member.Motor.SetAIInput(new Vector2(direction.x, direction.z));
@@ -127,7 +141,7 @@ public class FutsalTeamMatch : MonoBehaviour
         if (receiver != null && Time.time > receiveUntil)
             receiver = null;
         if (Possessor != null && (Distance(Possessor) > 2.65f ||
-            Mathf.Abs(ball.transform.position.y - Possessor.transform.position.y) > 1f))
+            !Possessor.Dribble.IsBallWithinControlHeight(ball, 1f)))
             Possessor.Dribble.ReleaseControl(0.35f);
 
         FutsalPlayer nearest = null;
@@ -136,7 +150,7 @@ public class FutsalTeamMatch : MonoBehaviour
         {
             float distance = Distance(member);
             if (!member.Dribble.CanAcquire || distance > 1.45f || distance >= best ||
-                Mathf.Abs(ball.transform.position.y - member.transform.position.y) >= 0.8f)
+                !member.Dribble.IsBallWithinControlHeight(ball, 0.8f))
                 continue;
             if (Possessor != null)
             {
@@ -219,7 +233,7 @@ public class FutsalTeamMatch : MonoBehaviour
         if (member.HasBall)
             return new Vector3(Mathf.Clamp(member.transform.position.x, -2f, 2f), 1f, 16f * attack);
         if (member == receiver)
-            return ballPosition + Flat(ball.Rigidbody.linearVelocity) * 0.12f;
+            return ClampToPitch(member, ballPosition + Flat(ball.Rigidbody.linearVelocity) * 0.12f);
         if (member.Role == FutsalRole.Goalkeeper)
             return new Vector3(Mathf.Clamp(ballPosition.x + ball.Rigidbody.linearVelocity.x * 0.18f, -2.4f, 2.4f),
                 1f, member.HomePosition.z);
@@ -237,7 +251,7 @@ public class FutsalTeamMatch : MonoBehaviour
             return new Vector3(lane, 1f, Mathf.Clamp(ballPosition.z + attack * 3f, -13f, 13f));
         }
         if (NearestFieldPlayer(member.Team) == member)
-            return new Vector3(Mathf.Clamp(ballPosition.x, -10f, 10f), 1f, Mathf.Clamp(ballPosition.z, -16f, 16f));
+            return ClampToPitch(member, ballPosition);
         if (teamSize == 5)
             return new Vector3(Mathf.Clamp(member.HomePosition.x * 0.8f + ballPosition.x * 0.3f, -8f, 8f),
                 1f, Mathf.Clamp(member.HomePosition.z + ballPosition.z * 0.4f, -13f, 13f));
@@ -252,6 +266,22 @@ public class FutsalTeamMatch : MonoBehaviour
             if (opponent.Team != member.Team)
                 nearest = Mathf.Min(nearest, Flat(opponent.transform.position - member.transform.position).magnitude);
         return nearest;
+    }
+
+    private bool IsChasingBall(FutsalPlayer member)
+    {
+        return member == receiver || (!member.HasBall && member.Role == FutsalRole.FieldPlayer &&
+            (Possessor == null || Possessor.Team != member.Team) && NearestFieldPlayer(member.Team) == member);
+    }
+
+    private Vector3 ClampToPitch(FutsalPlayer member, Vector3 target)
+    {
+        // The center can approach the wall until the player's capsule, rather
+        // than an arbitrary tactical boundary, runs out of room.
+        Vector3 clearance = member.GetComponent<Collider>().bounds.extents + Vector3.one * 0.04f;
+        return new Vector3(Mathf.Clamp(target.x, pitchBounds.min.x + clearance.x, pitchBounds.max.x - clearance.x),
+            member.transform.position.y,
+            Mathf.Clamp(target.z, pitchBounds.min.z + clearance.z, pitchBounds.max.z - clearance.z));
     }
 
     private Vector3 CalculateSeparation(FutsalPlayer member)
@@ -403,7 +433,7 @@ public class FutsalTeamMatch : MonoBehaviour
         StopAll();
         foreach (FutsalPlayer member in players)
             member.ResetToHome();
-        ball.Rigidbody.position = new Vector3(0f, 0.28f, 0f);
+        ball.Rigidbody.position = new Vector3(0f, 0.17f, 0f);
         ball.Rigidbody.linearVelocity = Vector3.zero;
         ball.Rigidbody.angularVelocity = Vector3.zero;
         FutsalPlayer kickoff = players[NextKickoffTeam == FutsalTeam.Home ? 0 : teamSize];

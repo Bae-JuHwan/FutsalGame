@@ -21,6 +21,7 @@ public class PlayerDribbleController : MonoBehaviour
 
     private PlayerController playerController;
     private Rigidbody playerRigidbody;
+    private Collider playerCollider;
     private BallController ball;
     private bool hasPossession;
     private float releasedUntil;
@@ -43,6 +44,16 @@ public class PlayerDribbleController : MonoBehaviour
     {
         playerController = GetComponent<PlayerController>();
         playerRigidbody = GetComponent<Rigidbody>();
+        playerCollider = GetComponent<Collider>();
+    }
+
+    public bool IsBallWithinControlHeight(BallController candidate, float maximumHeight)
+    {
+        // Compare contact surfaces, not centers: a smaller grounded ball must
+        // remain reachable regardless of its radius or the player's height.
+        float feetHeight = playerCollider != null ? playerCollider.bounds.min.y : transform.position.y;
+        float ballBottom = candidate.GetComponent<SphereCollider>().bounds.min.y;
+        return Mathf.Abs(ballBottom - feetHeight) <= maximumHeight;
     }
 
     private void Start()
@@ -97,7 +108,7 @@ public class PlayerDribbleController : MonoBehaviour
 
         if (!hasPossession)
         {
-            bool ballIsReachable = distance <= acquireRadius && Mathf.Abs(toBall.y) < 0.8f;
+            bool ballIsReachable = distance <= acquireRadius && IsBallWithinControlHeight(ball, 0.8f);
             bool ballIsControllable = ballSpeed <= maxAcquireBallSpeed;
             if (!ballIsReachable || !ballIsControllable)
                 return;
@@ -105,7 +116,7 @@ public class PlayerDribbleController : MonoBehaviour
             hasPossession = true;
         }
 
-        if (distance > breakDistance || Mathf.Abs(toBall.y) > 1f)
+        if (distance > breakDistance || !IsBallWithinControlHeight(ball, 1f))
         {
             hasPossession = false;
             return;

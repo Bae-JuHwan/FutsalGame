@@ -56,4 +56,17 @@ public class BallController : MonoBehaviour
         ballRigidbody.position = spawnPosition;
         ballRigidbody.rotation = Quaternion.identity;
     }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        GoalNetReaction net = collision.collider.GetComponentInParent<GoalNetReaction>();
+        if (net == null || !collision.collider.name.StartsWith("Net ") || collision.contactCount == 0)
+            return;
+        ContactPoint contact = collision.GetContact(0);
+        net.ScoringTrigger?.CheckNetContact(this, contact.point, contact.normal);
+        net.React(contact.point, -contact.normal * collision.relativeVelocity.magnitude);
+        // The net absorbs the shot rather than bouncing it like a rigid wall.
+        ballRigidbody.linearVelocity *= 0.2f;
+        ballRigidbody.angularVelocity *= 0.4f;
+    }
 }

@@ -58,6 +58,7 @@ public static class FutsalStarterSceneBuilder
 
         CreateGoal("North Goal", new Vector3(0f, 0f, 17.7f), goalMaterial, environment.transform);
         CreateGoal("South Goal", new Vector3(0f, 0f, -17.7f), goalMaterial, environment.transform);
+        FutsalGoalGeometry.OpenGoalMouths();
 
         GameObject player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
         player.name = "Player";
@@ -131,13 +132,7 @@ public static class FutsalStarterSceneBuilder
         goal.transform.SetParent(parent);
         goal.transform.position = position;
 
-        const float halfWidth = 3f;
-        const float height = 2.2f;
-        const float thickness = 0.16f;
-
-        CreateBox("Left Post", position + new Vector3(-halfWidth, height * 0.5f, 0f), new Vector3(thickness, height, thickness), material, goal.transform);
-        CreateBox("Right Post", position + new Vector3(halfWidth, height * 0.5f, 0f), new Vector3(thickness, height, thickness), material, goal.transform);
-        CreateBox("Crossbar", position + new Vector3(0f, height, 0f), new Vector3(halfWidth * 2f, thickness, thickness), material, goal.transform);
+        FutsalGoalGeometry.Build(goal.transform, material);
     }
 
     private static Material CreateOrLoadMaterial(string name, Color color)
